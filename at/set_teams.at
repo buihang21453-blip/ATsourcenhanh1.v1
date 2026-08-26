@@ -1,91 +1,27 @@
-local m = { version = "1.4.1" }
+local m = { version = "1.5.1" }
 
-local config_path
-local enabled = false
-local forced_away = 0
 local current_home, current_away = 0, 0
-local requested_count = 0
-local status = "dang cho PES tao du lieu doi"
+local status = "dang cho core set_team_id"
 
-local function trim(s)
-    return (s:gsub("^%s+", ""):gsub("%s+$", ""))
-end
-
-local function find_config(ctx)
-    local candidates = {
-        ".\\at\\set_teams.ini",
-        ctx.at_dir and (ctx.at_dir .. "at\\set_teams.ini") or nil,
-        ctx.at_dir and (ctx.at_dir .. "\\at\\set_teams.ini") or nil,
-    }
-    for _, path in ipairs(candidates) do
-        if path then
-            local file = io.open(path, "r")
-            if file then file:close(); return path end
-        end
-    end
-    return ".\\at\\set_teams.ini"
-end
-
-local function read_request()
-    local file = io.open(config_path, "r")
-    if not file then
-        enabled = false
-        status = "khong tim thay set_teams.ini"
-        return false
-    end
-    local values = {}
-    for line in file:lines() do
-        line = line:gsub("[;#].*$", "")
-        local key, value = line:match("^%s*([%w_]+)%s*=%s*(.-)%s*$")
-        if key and value then values[key:lower()] = trim(value) end
-    end
-    file:close()
-    enabled = tonumber(values.enabled or "0") == 1
-    forced_away = tonumber(values.away or "0") or 0
-    if not enabled then status = "da tat"; return false end
-    if forced_away < 1 or forced_away > 0x1ffff then
-        enabled = false
-        status = "Away ID khong hop le"
-        return false
-    end
-    status = string.format("san sang ep Away=%d", forced_away)
-    return true
-end
-
--- AT Nhanh 1 v1.4.1 cho phep callback set_teams tra ve Away ID moi.
--- Khong quet dia chi dong va khong tao codecave tu Lua.
 function m.set_teams(ctx, home, away)
     current_home, current_away = home, away
-    read_request()
-    if not enabled then
-        log(string.format("SET TEAMS AWAY NHANH 1 v1.4.1: giu nguyen %d vs %d (%s)", home, away, status))
-        return nil
-    end
-    if away == forced_away then
-        status = string.format("PES da xac nhan Away=%d", away)
-        log("SET TEAMS AWAY NHANH 1 v1.4.1: " .. status)
-        return nil
-    end
-    requested_count = requested_count + 1
-    status = string.format("yeu cau Away %d -> %d (lan %d)", away, forced_away, requested_count)
-    log("SET TEAMS AWAY NHANH 1 v1.4.1: " .. status)
-    return forced_away
+    status = string.format("Core xac nhan Home=%d Away=%d", home, away)
+    log("SET TEAM COREHOOK NHANH 1 v1.5.1: " .. status)
+    -- v1.5.1: Lua chi quan sat/log. Viec ep doi nam trong at.cpp core hook.
 end
 
 function m.overlay_on(ctx)
     return string.format(
-        "PES ARENA - NHANH 1 - SET TEAM AWAY v1.4.1\n" ..
-        "PES doc duoc: %d vs %d\nAway yeu cau: %d\nTrang thai: %s",
-        current_home, current_away, forced_away, status)
+        "PES ARENA - NHANH 1 - SET TEAM COREHOOK v1.5.1\n" ..
+        "PES/Core doc duoc: %d vs %d\nTrang thai: %s",
+        current_home, current_away, status)
 end
 
 function m.init(ctx)
-    config_path = find_config(ctx)
-    read_request()
     ctx.register("set_teams", m.set_teams)
     ctx.register("overlay_on", m.overlay_on)
-    log("PES Arena - Nhanh 1 - Set Team Away v1.4.1 loaded")
-    log("SET TEAMS AWAY NHANH 1 v1.4.1 CONFIG: " .. config_path)
+    log("PES Arena - Nhanh 1 - Set Team CoreHook v1.5.1 loaded")
+    log("SET TEAM COREHOOK NHANH 1 v1.5.1: Lua observer; force logic is in at.cpp")
 end
 
 return m

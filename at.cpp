@@ -5065,7 +5065,7 @@ void at_lookup_file(LONGLONG p1, LONGLONG p2, char *filename)
     }
 }
 
-// PES Arena Set Team Core v1.5.0
+// PES Arena Set Team Core v1.5.1
 // Force team ids at the original set_team_id hook, before PES copies TEAM_INFO_STRUCT.
 // This avoids dynamic CE addresses and keeps all non-team-id bits intact.
 struct FORCE_TEAM_CONFIG {
@@ -5118,15 +5118,20 @@ static void load_force_team_config()
     if (_force_team_cfg_last_read && now - _force_team_cfg_last_read < 250) return;
     _force_team_cfg_last_read = now;
 
+    wchar_t at_ini[MAX_PATH];
     wchar_t module_ini[MAX_PATH];
     wchar_t root_ini[MAX_PATH];
+    _snwprintf(at_ini, MAX_PATH, L"%sat\\set_teams.ini", at_dir);
     _snwprintf(module_ini, MAX_PATH, L"%smodule\\set_teams.ini", at_dir);
     _snwprintf(root_ini, MAX_PATH, L"%sset_teams.ini", at_dir);
+    at_ini[MAX_PATH-1] = L'\0';
     module_ini[MAX_PATH-1] = L'\0';
     root_ini[MAX_PATH-1] = L'\0';
 
     const wchar_t *filename = NULL;
-    if (GetFileAttributesW(module_ini) != INVALID_FILE_ATTRIBUTES) filename = module_ini;
+    // Nhanh 1 runtime/release stores the config under .\at\set_teams.ini.
+    if (GetFileAttributesW(at_ini) != INVALID_FILE_ATTRIBUTES) filename = at_ini;
+    else if (GetFileAttributesW(module_ini) != INVALID_FILE_ATTRIBUTES) filename = module_ini;
     else if (GetFileAttributesW(root_ini) != INVALID_FILE_ATTRIBUTES) filename = root_ini;
 
     FORCE_TEAM_CONFIG next = { false, 0, 0, L"" };
@@ -5135,7 +5140,7 @@ static void load_force_team_config()
         return;
     }
 
-    // Preferred v1.5.0 format: [set_teams] section.
+    // Preferred v1.5.1 format: [set_teams] section.
     int section_enabled = GetPrivateProfileIntW(L"set_teams", L"enabled", -1, filename);
     if (section_enabled >= 0) {
         next.enabled = (section_enabled != 0);
@@ -5157,7 +5162,7 @@ static void load_force_team_config()
 
     _force_team_cfg = next;
     if (changed) {
-        log_(L"SET_TEAM_CORE v1.5.0: enabled=%d home=%d away=%d ini=%s\n",
+        log_(L"SET_TEAM_CORE v1.5.1: enabled=%d home=%d away=%d ini=%s\n",
             _force_team_cfg.enabled ? 1 : 0, _force_team_cfg.home, _force_team_cfg.away,
             _force_team_cfg.source);
     }
@@ -5190,7 +5195,7 @@ void at_set_team_id(DWORD *dest, TEAM_INFO_STRUCT *team_info, DWORD offset)
             DWORD before = decode_team_id(*team_id_encoded);
             if (before != requested) {
                 *team_id_encoded = replace_team_id_bits(*team_id_encoded, requested);
-                logu_("SET_TEAM_CORE v1.5.0: FORCE %s %d -> %d encoded=0x%08x\n",
+                logu_("SET_TEAM_CORE v1.5.1: FORCE %s %d -> %d encoded=0x%08x\n",
                     is_home ? "HOME" : "AWAY", before, requested, *team_id_encoded);
             }
         }
