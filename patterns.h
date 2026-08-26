@@ -161,6 +161,13 @@ static BYTE pattern_set_team_id[15] =
     //"\x4c\x01\xc1";
 static int offs_set_team_id = -8;
 
+/* Menu selection: low DWORD = Home, high DWORD = Away. */
+static BYTE pattern_force_menu_away[] =
+    "\x48\x8b\x47\x20"
+    "\x48\x89\x43\x20"
+    "\x48\x8b\x5c\x24\x40";
+static int offs_force_menu_away = 0;
+
 static BYTE pattern_set_team_id_head[2] =
     "\x52"; // push rdx
 

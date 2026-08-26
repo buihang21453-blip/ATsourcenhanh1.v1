@@ -91,6 +91,7 @@ public:
     BYTE *_hp_at_mem_copy;
     BYTE *_hp_at_lookup_file;
     BYTE *_hp_at_set_team_id;
+    BYTE *_hp_at_force_menu_away;
     BYTE *_hp_at_set_settings;
     BYTE *_hp_at_trophy_check;
     BYTE *_hp_at_trophy_check2;
@@ -179,6 +180,7 @@ public:
                  _hp_at_mem_copy(NULL),
                  _hp_at_lookup_file(NULL),
                  _hp_at_set_team_id(NULL),
+                 _hp_at_force_menu_away(NULL),
                  _hp_at_set_settings(NULL),
                  _hp_at_trophy_check(NULL),
                  _hp_at_trophy_check2(NULL),
