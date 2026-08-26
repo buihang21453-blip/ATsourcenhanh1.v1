@@ -21,9 +21,9 @@ copy /y toggle.wav "%OUT%\toggle.wav" >nul
 copy /y at\at_tracker.at "%OUT%\at\at_tracker.at" >nul
 copy /y at\set_teams.at "%OUT%\at\set_teams.at" >nul
 copy /y at\set_teams.ini "%OUT%\at\set_teams.ini" >nul
-copy /y HUONG_DAN_MENU_PRESELECT_v1.2.0.txt "%OUT%\HUONG_DAN_MENU_PRESELECT_v1.2.0.txt" >nul
+copy /y HUONG_DAN_MENU_PRESELECT_v1.2.1.txt "%OUT%\HUONG_DAN_MENU_PRESELECT_v1.2.1.txt" >nul
 
-> "%OUT%\HUONG_DAN.txt" echo PES ARENA AT v1.2.0 - Menu Preselect
+> "%OUT%\HUONG_DAN.txt" echo PES ARENA AT v1.2.1 - Menu Preselect
 >>"%OUT%\HUONG_DAN.txt" echo.
 >>"%OUT%\HUONG_DAN.txt" echo 1. Dat thu muc AT o noi co quyen ghi file.
 >>"%OUT%\HUONG_DAN.txt" echo 2. Chay AT.exe.

@@ -709,10 +709,6 @@ extern "C" void at_set_team_id(DWORD *dest, TEAM_INFO_STRUCT *team_info, DWORD o
 
 extern "C" void at_set_team_id_hk();
 
-extern "C" ULONGLONG at_force_menu_away(ULONGLONG packed_teams);
-
-extern "C" void at_force_menu_away_hk();
-
 extern "C" void at_set_settings(STAD_STRUCT *dest_ss, STAD_STRUCT *src_ss);
 
 extern "C" void at_set_settings_hk();
@@ -2451,9 +2447,8 @@ void module_custom_event(module_t *m, custom_event_t *ce, REGISTERS *regs)
     LeaveCriticalSection(&_cs);
 }
 
-bool module_set_teams(module_t *m, DWORD home, DWORD away, DWORD *new_home, DWORD *new_away)
+void module_set_teams(module_t *m, DWORD home, DWORD away)
 {
-    bool changed(false);
     if (m->evt_set_teams != 0) {
         EnterCriticalSection(&_cs);
         lua_pushvalue(m->L, m->evt_set_teams);
@@ -2462,29 +2457,13 @@ bool module_set_teams(module_t *m, DWORD home, DWORD away, DWORD *new_home, DWOR
         lua_pushvalue(L, 1); // ctx
         lua_pushinteger(L, home);
         lua_pushinteger(L, away);
-        // A module may return two integer team ids to override the selection.
-        // Modules that only observe set_teams continue to work: missing return
-        // values are received as nil and are ignored.
-        if (lua_pcall(L, 3, 2, 0) != LUA_OK) {
+        if (lua_pcall(L, 3, 0, 0) != LUA_OK) {
             const char *err = luaL_checkstring(L, -1);
             logu_("[%d] lua ERROR from module_set_teams: %s\n", GetCurrentThreadId(), err);
             lua_pop(L, 1);
         }
-        else {
-            if (lua_isnumber(L, -2) && lua_isnumber(L, -1)) {
-                DWORD h = (DWORD)luaL_checkinteger(L, -2);
-                DWORD a = (DWORD)luaL_checkinteger(L, -1);
-                if (h > 0 && h <= 0x1ffff && a > 0 && a <= 0x1ffff) {
-                    *new_home = h;
-                    *new_away = a;
-                    changed = (h != home || a != away);
-                }
-            }
-            lua_pop(L, 2);
-        }
         LeaveCriticalSection(&_cs);
     }
-    return changed;
 }
 
 void module_set_home_team_for_kits(module_t *m, DWORD team_id, bool is_edit_mode)
@@ -5091,42 +5070,6 @@ DWORD decode_team_id(DWORD team_id_encoded)
     return (team_id_encoded >> 0x0e) & 0x1ffff;
 }
 
-DWORD replace_team_id(DWORD team_id_encoded, DWORD new_team_id)
-{
-    const DWORD team_id_mask = 0x1ffff;
-    const DWORD encoded_mask = team_id_mask << 0x0e;
-    return (team_id_encoded & ~encoded_mask)
-        | ((new_team_id & team_id_mask) << 0x0e);
-}
-
-extern "C" ULONGLONG at_force_menu_away(ULONGLONG packed_teams)
-{
-    static bool completed = false;
-    DWORD home = (DWORD)(packed_teams & 0xffffffffULL);
-    DWORD away = (DWORD)(packed_teams >> 32);
-
-    // The instruction is inside a shared copy routine. Only paired, valid PES
-    // Team IDs are eligible, so unrelated copies pass through unchanged.
-    if (completed || home < 1 || home > 0x1ffff || away < 1 || away > 0x1ffff) {
-        return packed_teams;
-    }
-
-    wchar_t request_ini[MAX_PATH];
-    _snwprintf(request_ini, MAX_PATH - 1, L"%sat\\set_teams.ini", at_dir);
-    request_ini[MAX_PATH - 1] = L'\0';
-    int enabled = GetPrivateProfileIntW(L"set_teams", L"enabled", 0, request_ini);
-    DWORD forced_away = (DWORD)GetPrivateProfileIntW(L"set_teams", L"away", 0, request_ini);
-    if (!enabled || forced_away < 1 || forced_away > 0x1ffff) {
-        return packed_teams;
-    }
-
-    ULONGLONG result = ((ULONGLONG)forced_away << 32) | home;
-    completed = true;
-    logu_("MENU AWAY FORCED ONCE: home=%u, away=%u --> away=%u, packed=%016llx\n",
-        home, away, forced_away, result);
-    return result;
-}
-
 void at_set_team_id(DWORD *dest, TEAM_INFO_STRUCT *team_info, DWORD offset)
 {
     bool is_home = (offset == 0);
@@ -5168,35 +5111,18 @@ void at_set_team_id(DWORD *dest, TEAM_INFO_STRUCT *team_info, DWORD offset)
             set_context_field_int("stadium_choice", mi->stadium_choice);
             set_match_info(mi);
 
-            DWORD *home_team_id_encoded = (DWORD*)((BYTE*)dest - 0x690);
-            DWORD home = decode_team_id(*home_team_id_encoded);
+            DWORD home = decode_team_id(*(DWORD*)((BYTE*)dest - 0x690));
             DWORD away = decode_team_id(*team_id_encoded);
-
-            DWORD new_home = home;
-            DWORD new_away = away;
 
             // lua call-backs
             vector<module_t*>::iterator i;
             for (i = _modules.begin(); i != _modules.end(); i++) {
                 module_t *m = *i;
-                if (module_set_teams(m, home, away, &new_home, &new_away)) {
-                    break;
-                }
+                module_set_teams(m, home, away);
             }
 
-            if (new_home != home || new_away != away) {
-                // Home has already been copied into MATCH_INFO_STRUCT. Away is
-                // currently being copied, so update both its source and target.
-                *home_team_id_encoded = replace_team_id(*home_team_id_encoded, new_home);
-                *dest = replace_team_id(*dest, new_away);
-                *team_id_encoded = replace_team_id(*team_id_encoded, new_away);
-
-                logu_("FORCED TEAMS: %d vs %d --> %d vs %d\n",
-                    home, away, new_home, new_away);
-            }
-
-            set_context_field_int("home_team", new_home);
-            set_context_field_int("away_team", new_away);
+            set_context_field_int("home_team", home);
+            set_context_field_int("away_team", away);
         }
     }
 }
@@ -7258,7 +7184,7 @@ DWORD install_func(LPVOID thread_param) {
     hook_cache_t hcache(cache_file);
 
     // prepare patterns
-#define NUM_PATTERNS 48
+#define NUM_PATTERNS 47
     BYTE *frag[NUM_PATTERNS+1];
     frag[1] = lcpk_pattern_at_read_file;
     frag[2] = lcpk_pattern_at_get_size;
@@ -7307,7 +7233,6 @@ DWORD install_func(LPVOID thread_param) {
     frag[45] = pattern_deletefilew;
     frag[46] = pattern_getfileattributesw;
     frag[47] = pattern_findfirstfilew;
-    frag[48] = pattern_force_menu_away;
 
     memset(_variations, 0xff, sizeof(_variations));
     _variations[1] = 24;
@@ -7378,7 +7303,6 @@ DWORD install_func(LPVOID thread_param) {
     frag_len[45] = sizeof(pattern_deletefilew)-1;
     frag_len[46] = sizeof(pattern_getfileattributesw)-1;
     frag_len[47] = sizeof(pattern_findfirstfilew)-1;
-    frag_len[48] = sizeof(pattern_force_menu_away)-1;
 
     int offs[NUM_PATTERNS+1];
     offs[1] = lcpk_offs_at_read_file;
@@ -7428,7 +7352,6 @@ DWORD install_func(LPVOID thread_param) {
     offs[45] = offs_deletefilew;
     offs[46] = offs_getfileattributesw;
     offs[47] = offs_findfirstfilew;
-    offs[48] = offs_force_menu_away;
 
     BYTE **addrs[NUM_PATTERNS+1];
     addrs[1] = &_config->_hp_at_read_file;
@@ -7478,7 +7401,6 @@ DWORD install_func(LPVOID thread_param) {
     addrs[45] = &_config->_hp_at_deletefilew;
     addrs[46] = &_config->_hp_at_getfileattributesw;
     addrs[47] = &_config->_hp_at_findfirstfilew;
-    addrs[48] = &_config->_hp_at_force_menu_away;
 
     // check hook cache first
     for (int i=0;; i++) {
@@ -7724,7 +7646,6 @@ bool hook_if_all_found() {
         if (_config->_lua_enabled) {
             log_(L"-------------------------------\n");
             log_(L"at_set_team_id: %p\n", at_set_team_id_hk);
-            log_(L"at_force_menu_away: %p\n", at_force_menu_away_hk);
             log_(L"at_set_settings: %p\n", at_set_settings_hk);
             log_(L"at_trophy_check: %p\n", at_trophy_check_hk);
             log_(L"at_trophy_check2: %p\n", at_trophy_check2_hk);
@@ -7757,11 +7678,6 @@ bool hook_if_all_found() {
                         (BYTE*)pattern_set_team_id_head, sizeof(pattern_set_team_id_head)-1,
                         (BYTE*)pattern_set_team_id_tail_2, sizeof(pattern_set_team_id_tail_2)-1);
                 }
-            }
-            if (_config->_hp_at_force_menu_away) {
-                logu_("_hp_at_force_menu_away: %p\n", _config->_hp_at_force_menu_away);
-                hook_call_point(_config->_hp_at_force_menu_away,
-                    (BYTE*)at_force_menu_away_hk, 0, 3);
             }
             if (_config->_hp_at_set_settings)
                 hook_call_with_head_and_tail(_config->_hp_at_set_settings, (BYTE*)at_set_settings_hk,

@@ -1,72 +1,117 @@
-local m = {}
-
+local m = { version = "1.2.1" }
 local config_path
 local enabled = false
-local forced_away = 0
-local current_home = 0
-local current_away = 0
-local status = "waiting"
+local forced_home, forced_away = 0, 0
+local current_home, current_away = 0, 0
+local status = "waiting for menu"
+local pair_ptr_slot
+local installed = false
+local applied_count = 0
 
-local function trim(s)
-    return (s:gsub("^%s+", ""):gsub("%s+$", ""))
+local function trim(s) return (s:gsub("^%s+", ""):gsub("%s+$", "")) end
+
+local function find_config(ctx)
+    local candidates = {
+        ".\\at\\set_teams.ini",
+        ctx.at_dir and (ctx.at_dir .. "at\\set_teams.ini") or nil,
+        ctx.at_dir and (ctx.at_dir .. "\\at\\set_teams.ini") or nil,
+    }
+    for _, path in ipairs(candidates) do
+        if path then
+            local file = io.open(path, "r")
+            if file then
+                file:close()
+                return path
+            end
+        end
+    end
+    return ".\\at\\set_teams.ini"
 end
 
 local function read_request()
     local file = io.open(config_path, "r")
-    if not file then
-        enabled = false
-        status = "set_teams.ini not found"
-        return false
-    end
-
+    if not file then enabled = false; status = "set_teams.ini not found"; return false end
     local values = {}
     for line in file:lines() do
         line = line:gsub("[;#].*$", "")
         local key, value = line:match("^%s*([%w_]+)%s*=%s*(.-)%s*$")
-        if key and value then
-            values[key:lower()] = trim(value)
-        end
+        if key and value then values[key:lower()] = trim(value) end
     end
     file:close()
-
     enabled = tonumber(values.enabled or "0") == 1
+    forced_home = tonumber(values.home or "0") or 0
     forced_away = tonumber(values.away or "0") or 0
-
-    if not enabled then
-        status = "disabled"
-        return false
+    if not enabled then status = "disabled"; return false end
+    if forced_home < 1 or forced_home > 0x1ffff or forced_away < 1 or forced_away > 0x1ffff then
+        status = "invalid team id"; return false
     end
-    if forced_away < 1 or forced_away > 0x1ffff then
-        status = "invalid team id"
-        return false
-    end
+    return true
+end
 
-    status = string.format("Away-only target %d", forced_away)
+local function abs_jump(address)
+    return "\xff\x25\x00\x00\x00\x00" .. memory.pack("u64", address)
+end
+
+local function install_capture_hook()
+    local pattern = "\x48\x8b\x47\x20\x48\x89\x43\x20\x48\x8b\x5c\x24\x40\x48\x83\xc4\x30"
+    local hook_addr = memory.search_process(pattern)
+    if not hook_addr then status = "AOB menu pair not found"; log("MENU PRESELECT ERROR: " .. status); return false end
+    local original_code = memory.read(hook_addr, #pattern)
+    pair_ptr_slot = memory.allocate_codecave(8)
+    memory.write(pair_ptr_slot, memory.pack("u64", 0))
+    local cave = memory.allocate_codecave(128)
+    local code =
+        "\x41\x53\x50" ..                                  -- push r11; push rax
+        "\x49\xbb" .. memory.pack("u64", pair_ptr_slot) .. -- mov r11,slot
+        "\x48\x8d\x43\x20" ..                            -- lea rax,[rbx+20]
+        "\x49\x89\x03\x58\x41\x5b" ..                 -- store; pop rax/r11
+        original_code .. abs_jump(hook_addr + #pattern)
+    memory.write(cave, code)
+    memory.write(hook_addr, abs_jump(cave) .. "\x90\x90\x90")
+    installed = true
+    status = "hook ready; open team menu"
+    log(string.format("MENU PRESELECT v1.2.1 hook=%s slot=%s cave=%s", memory.hex(hook_addr), memory.hex(pair_ptr_slot), memory.hex(cave)))
+    return true
+end
+
+local function apply_preselect()
+    if not installed or not read_request() then return false end
+    local ok, raw_ptr = pcall(memory.read, pair_ptr_slot, 8)
+    if not ok or not raw_ptr then return false end
+    local ptr = memory.unpack("u64", raw_ptr)
+    if not ptr or ptr == 0 then status = "waiting for menu pointer"; return false end
+    local ok_read, pair = pcall(memory.read, ptr, 8)
+    if not ok_read or not pair or #pair ~= 8 then return false end
+    local h = memory.unpack("u32", pair:sub(1,4))
+    local a = memory.unpack("u32", pair:sub(5,8))
+    if h < 1 or h > 0x1ffff or a < 1 or a > 0x1ffff then return false end
+    memory.write(ptr, memory.pack("u32", forced_home) .. memory.pack("u32", forced_away))
+    applied_count = applied_count + 1
+    status = string.format("menu set %d vs %d (writes: %d)", forced_home, forced_away, applied_count)
     return true
 end
 
 function m.set_teams(ctx, home, away)
-    current_home = home
-    current_away = away
-
-    read_request()
-    log(string.format("SET TEAMS OBSERVE ONLY: %d vs %d (%s)",
-        home, away, status))
+    current_home, current_away = home, away
+    status = string.format("PES confirmed %d vs %d", home, away)
+    log("MENU PRESELECT: " .. status)
 end
-
+function m.key_down(ctx, vkey) apply_preselect() end
+function m.gamepad_input(ctx, inputs) apply_preselect() end
 function m.overlay_on(ctx)
-    read_request()
-    return string.format(
-        "PES ARENA MENU AWAY v1.2.0\nCurrent: %d vs %d\nAway target: %d\nStatus: %s",
-        current_home, current_away, forced_away, status)
+    apply_preselect()
+    return string.format("PES ARENA MENU PRESELECT v1.2.1\nPES confirmed: %d vs %d\nMenu target: %d vs %d\nStatus: %s", current_home, current_away, forced_home, forced_away, status)
 end
 
 function m.init(ctx)
-    config_path = ctx.sider_dir .. "at\\set_teams.ini"
+    config_path = find_config(ctx)
+    log("MENU PRESELECT CONFIG: " .. config_path)
     read_request()
+    install_capture_hook()
     ctx.register("set_teams", m.set_teams)
+    ctx.register("key_down", m.key_down)
+    ctx.register("gamepad_input", m.gamepad_input)
     ctx.register("overlay_on", m.overlay_on)
-    log("PES Arena Menu Away v1.2.0 loaded")
+    log("PES Arena Menu Preselect v1.2.1 loaded")
 end
-
 return m

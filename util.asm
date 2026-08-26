@@ -11,7 +11,6 @@ extern at_get_size:proc
 extern at_mem_copy:proc
 extern at_lookup_file:proc
 extern at_set_team_id:proc
-extern at_force_menu_away:proc
 extern at_set_settings:proc
 extern at_trophy_check:proc
 extern at_context_reset:proc
@@ -162,16 +161,6 @@ done:   add     rsp,40h
         ret
 
 at_set_team_id_hk endp
-
-at_force_menu_away_hk proc
-        mov     rax,[rdi+20h]
-        sub     rsp,28h
-        mov     rcx,rax
-        call    at_force_menu_away
-        add     rsp,28h
-        mov     [rbx+20h],rax
-        ret
-at_force_menu_away_hk endp
 
 ;0000000150E94EB3 | 48 8B 82 98 00 00 00               | mov rax,qword ptr ds:[rdx+98]        |
 ;0000000150E94EBA | 48 89 81 98 00 00 00               | mov qword ptr ds:[rcx+98],rax        |
