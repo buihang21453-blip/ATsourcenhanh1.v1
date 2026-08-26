@@ -1,4 +1,4 @@
-name: Build PES Arena AT
+name: Build PES Arena AT - Nhanh 1 - Set Team Away v1.4.1
 
 on:
   workflow_dispatch:
@@ -55,13 +55,13 @@ jobs:
       - name: Create Release ZIP
         shell: powershell
         run: |
-          Compress-Archive -Path release\* -DestinationPath PES_Arena_AT_v1.2.1_MenuPreselect.zip -Force
+          Compress-Archive -Path release\* -DestinationPath PES_Arena_AT_Nhanh1_SetTeamAway_v1.4.1_Release.zip -Force
 
       - name: Upload Release ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: PES_Arena_AT_v1.2.1_MenuPreselect_Release
-          path: PES_Arena_AT_v1.2.1_MenuPreselect.zip
+          name: PES_Arena_AT_Nhanh1_SetTeamAway_v1.4.1_Release
+          path: PES_Arena_AT_Nhanh1_SetTeamAway_v1.4.1_Release.zip
           if-no-files-found: error
 
       - name: Install Inno Setup
@@ -77,6 +77,6 @@ jobs:
       - name: Upload Setup EXE
         uses: actions/upload-artifact@v4
         with:
-          name: PES_Arena_AT_v1.2.1_MenuPreselect_Setup
-          path: installer\output\PES_Arena_AT_v1.2.1_MenuPreselect_Setup.exe
+          name: PES_Arena_AT_Nhanh1_SetTeamAway_v1.4.1_Setup
+          path: installer\output\PES_Arena_AT_Nhanh1_SetTeamAway_v1.4.1_Setup.exe
           if-no-files-found: error

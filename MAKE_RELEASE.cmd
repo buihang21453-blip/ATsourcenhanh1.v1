@@ -21,16 +21,15 @@ copy /y toggle.wav "%OUT%\toggle.wav" >nul
 copy /y at\at_tracker.at "%OUT%\at\at_tracker.at" >nul
 copy /y at\set_teams.at "%OUT%\at\set_teams.at" >nul
 copy /y at\set_teams.ini "%OUT%\at\set_teams.ini" >nul
-copy /y HUONG_DAN_MENU_PRESELECT_v1.2.1.txt "%OUT%\HUONG_DAN_MENU_PRESELECT_v1.2.1.txt" >nul
-
-> "%OUT%\HUONG_DAN.txt" echo PES ARENA AT v1.2.1 - Menu Preselect
+> "%OUT%\HUONG_DAN.txt" echo PES ARENA AT - NHANH 1 - SET TEAM AWAY v1.4.1
 >>"%OUT%\HUONG_DAN.txt" echo.
 >>"%OUT%\HUONG_DAN.txt" echo 1. Dat thu muc AT o noi co quyen ghi file.
 >>"%OUT%\HUONG_DAN.txt" echo 2. Chay AT.exe.
 >>"%OUT%\HUONG_DAN.txt" echo 3. Mo PES2021.exe neu AT chua tu mo game.
 >>"%OUT%\HUONG_DAN.txt" echo 4. Ket qua tracker duoc luu tai at\auto_score_state.txt.
->>"%OUT%\HUONG_DAN.txt" echo 5. Sua at\set_teams.ini de dat Home va Away Team ID.
->>"%OUT%\HUONG_DAN.txt" echo 6. enabled=1 de dat san vi tri doi o Menu; nguoi choi tu bam xac nhan.
+>>"%OUT%\HUONG_DAN.txt" echo 5. Sua dong away trong at\set_teams.ini de dat Away Team ID.
+>>"%OUT%\HUONG_DAN.txt" echo 6. Home khong bi ep; enabled=1 de bat Set Team Away.
+>>"%OUT%\HUONG_DAN.txt" echo 7. Mo at.log va tim: SET TEAM AWAY override.
 >>"%OUT%\HUONG_DAN.txt" echo.
 >>"%OUT%\HUONG_DAN.txt" echo Trang thai: MATCH_END, MATCH_ABORT, TEAM_RESELECT; GAME_EXIT se duoc them o watcher desktop.
 

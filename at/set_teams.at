@@ -1,4 +1,4 @@
-local m = { version = "1.4.0" }
+local m = { version = "1.4.1" }
 
 local config_path
 local enabled = false
@@ -52,29 +52,29 @@ local function read_request()
     return true
 end
 
--- AT v1.4.0 cho phep callback set_teams tra ve Away ID moi.
+-- AT Nhanh 1 v1.4.1 cho phep callback set_teams tra ve Away ID moi.
 -- Khong quet dia chi dong va khong tao codecave tu Lua.
 function m.set_teams(ctx, home, away)
     current_home, current_away = home, away
     read_request()
     if not enabled then
-        log(string.format("SET TEAMS AWAY v1.4.0: giu nguyen %d vs %d (%s)", home, away, status))
+        log(string.format("SET TEAMS AWAY NHANH 1 v1.4.1: giu nguyen %d vs %d (%s)", home, away, status))
         return nil
     end
     if away == forced_away then
         status = string.format("PES da xac nhan Away=%d", away)
-        log("SET TEAMS AWAY v1.4.0: " .. status)
+        log("SET TEAMS AWAY NHANH 1 v1.4.1: " .. status)
         return nil
     end
     requested_count = requested_count + 1
     status = string.format("yeu cau Away %d -> %d (lan %d)", away, forced_away, requested_count)
-    log("SET TEAMS AWAY v1.4.0: " .. status)
+    log("SET TEAMS AWAY NHANH 1 v1.4.1: " .. status)
     return forced_away
 end
 
 function m.overlay_on(ctx)
     return string.format(
-        "PES ARENA - NHANH 3 - SET TEAM AWAY v1.4.0\n" ..
+        "PES ARENA - NHANH 1 - SET TEAM AWAY v1.4.1\n" ..
         "PES doc duoc: %d vs %d\nAway yeu cau: %d\nTrang thai: %s",
         current_home, current_away, forced_away, status)
 end
@@ -84,8 +84,8 @@ function m.init(ctx)
     read_request()
     ctx.register("set_teams", m.set_teams)
     ctx.register("overlay_on", m.overlay_on)
-    log("PES Arena - Nhanh 3 - Set Team Away v1.4.0 loaded")
-    log("SET TEAMS AWAY v1.4.0 CONFIG: " .. config_path)
+    log("PES Arena - Nhanh 1 - Set Team Away v1.4.1 loaded")
+    log("SET TEAMS AWAY NHANH 1 v1.4.1 CONFIG: " .. config_path)
 end
 
 return m
