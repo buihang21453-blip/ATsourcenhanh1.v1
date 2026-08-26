@@ -2447,8 +2447,9 @@ void module_custom_event(module_t *m, custom_event_t *ce, REGISTERS *regs)
     LeaveCriticalSection(&_cs);
 }
 
-void module_set_teams(module_t *m, DWORD home, DWORD away)
+DWORD module_set_teams(module_t *m, DWORD home, DWORD away)
 {
+    DWORD requested_away = away;
     if (m->evt_set_teams != 0) {
         EnterCriticalSection(&_cs);
         lua_pushvalue(m->L, m->evt_set_teams);
@@ -2457,13 +2458,23 @@ void module_set_teams(module_t *m, DWORD home, DWORD away)
         lua_pushvalue(L, 1); // ctx
         lua_pushinteger(L, home);
         lua_pushinteger(L, away);
-        if (lua_pcall(L, 3, 0, 0) != LUA_OK) {
+        if (lua_pcall(L, 3, 1, 0) != LUA_OK) {
             const char *err = luaL_checkstring(L, -1);
             logu_("[%d] lua ERROR from module_set_teams: %s\n", GetCurrentThreadId(), err);
             lua_pop(L, 1);
         }
+        else {
+            if (lua_isnumber(L, -1)) {
+                lua_Integer value = lua_tointeger(L, -1);
+                if (value > 0 && value <= 0x1ffff) {
+                    requested_away = (DWORD)value;
+                }
+            }
+            lua_pop(L, 1);
+        }
         LeaveCriticalSection(&_cs);
     }
+    return requested_away;
 }
 
 void module_set_home_team_for_kits(module_t *m, DWORD team_id, bool is_edit_mode)
@@ -5070,6 +5081,12 @@ DWORD decode_team_id(DWORD team_id_encoded)
     return (team_id_encoded >> 0x0e) & 0x1ffff;
 }
 
+DWORD replace_team_id(DWORD team_id_encoded, DWORD team_id)
+{
+    const DWORD team_id_mask = 0x1ffff << 0x0e;
+    return (team_id_encoded & ~team_id_mask) | ((team_id & 0x1ffff) << 0x0e);
+}
+
 void at_set_team_id(DWORD *dest, TEAM_INFO_STRUCT *team_info, DWORD offset)
 {
     bool is_home = (offset == 0);
@@ -5114,11 +5131,22 @@ void at_set_team_id(DWORD *dest, TEAM_INFO_STRUCT *team_info, DWORD offset)
             DWORD home = decode_team_id(*(DWORD*)((BYTE*)dest - 0x690));
             DWORD away = decode_team_id(*team_id_encoded);
 
-            // lua call-backs
+            // Lua callbacks may return an Away team id. A nil return keeps
+            // the original Sider/AT notification-only behaviour.
+            DWORD requested_away = away;
             vector<module_t*>::iterator i;
             for (i = _modules.begin(); i != _modules.end(); i++) {
                 module_t *m = *i;
-                module_set_teams(m, home, away);
+                requested_away = module_set_teams(m, home, requested_away);
+            }
+
+            if (requested_away != away) {
+                DWORD original_encoded = *team_id_encoded;
+                *team_id_encoded = replace_team_id(original_encoded, requested_away);
+                away = requested_away;
+                logu_("SET TEAM AWAY override: %d -> %d (encoded: %08x -> %08x)\n",
+                    decode_team_id(original_encoded), requested_away,
+                    original_encoded, *team_id_encoded);
             }
 
             set_context_field_int("home_team", home);
