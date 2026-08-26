@@ -1,5 +1,5 @@
 #define MyAppName "PES Arena AT"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.1.0"
 #define MyAppPublisher "PES Arena"
 #define MyAppExeName "AT.exe"
 
@@ -11,7 +11,7 @@ AppPublisher={#MyAppPublisher}
 DefaultDirName={localappdata}\PES Arena AT
 DefaultGroupName=PES Arena AT
 OutputDir=output
-OutputBaseFilename=PES_Arena_AT_v1.0.0_Setup
+OutputBaseFilename=PES_Arena_AT_v1.1.0_SetTeams_Setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern

@@ -1,0 +1,33 @@
+PES ARENA AT v1.1.0 - SET TEAMS NATIVE TEST
+================================================
+
+MUC TIEU
+- Lua set_teams.at doc Home/Away Team ID tu at/set_teams.ini.
+- AT native nhan 2 ID Lua tra ve va ap vao MATCH_INFO_STRUCT cua PES.
+
+CAU HINH
+Mo file: at/set_teams.ini
+
+enabled = 1
+home = 101
+away = 102
+
+Vi du tren ep Arsenal vs Chelsea voi database da kiem tra.
+Team ID phai la so thap phan dung voi database/patch PES dang dung.
+
+TEST
+1. Sao luu ban AT dang hoat dong.
+2. Chay AT.exe, sau do mo PES2021.exe.
+3. Chon mot cap doi khac Arsenal vs Chelsea.
+4. Tiep tuc den man hinh ao dau va vao tran.
+5. Kiem tra rieng: logo, ten CLB, ao dau, cau thu va doi hinh.
+6. Mo at.log va tim dong: FORCED TEAMS.
+
+TAT EP DOI
+Sua: enabled = 0
+
+LUU Y BAN THU NGHIEM
+- Neu logo doi nhung cau thu/doi hinh van la doi cu, hook hien tai dang chay
+  sau luc PES da nap mot phan TEAM_INFO. Khi do can chuyen override len som hon
+  trong at_set_team_id_hk.
+- Khong dung Cheat Engine cung luc test de tranh hai ben cung ghi Team ID.

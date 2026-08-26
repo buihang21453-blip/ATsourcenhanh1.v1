@@ -2447,8 +2447,9 @@ void module_custom_event(module_t *m, custom_event_t *ce, REGISTERS *regs)
     LeaveCriticalSection(&_cs);
 }
 
-void module_set_teams(module_t *m, DWORD home, DWORD away) //, TEAM_INFO_STRUCT *home_team_info, TEAM_INFO_STRUCT *away_team_info)
+bool module_set_teams(module_t *m, DWORD home, DWORD away, DWORD *new_home, DWORD *new_away)
 {
+    bool changed(false);
     if (m->evt_set_teams != 0) {
         EnterCriticalSection(&_cs);
         lua_pushvalue(m->L, m->evt_set_teams);
@@ -2457,15 +2458,29 @@ void module_set_teams(module_t *m, DWORD home, DWORD away) //, TEAM_INFO_STRUCT 
         lua_pushvalue(L, 1); // ctx
         lua_pushinteger(L, home);
         lua_pushinteger(L, away);
-        //lua_pushlightuserdata(L, home_team_info);
-        //lua_pushlightuserdata(L, away_team_info);
-        if (lua_pcall(L, 3, 0, 0) != LUA_OK) {
+        // A module may return two integer team ids to override the selection.
+        // Modules that only observe set_teams continue to work: missing return
+        // values are received as nil and are ignored.
+        if (lua_pcall(L, 3, 2, 0) != LUA_OK) {
             const char *err = luaL_checkstring(L, -1);
             logu_("[%d] lua ERROR from module_set_teams: %s\n", GetCurrentThreadId(), err);
             lua_pop(L, 1);
         }
+        else {
+            if (lua_isnumber(L, -2) && lua_isnumber(L, -1)) {
+                DWORD h = (DWORD)luaL_checkinteger(L, -2);
+                DWORD a = (DWORD)luaL_checkinteger(L, -1);
+                if (h > 0 && h <= 0x1ffff && a > 0 && a <= 0x1ffff) {
+                    *new_home = h;
+                    *new_away = a;
+                    changed = (h != home || a != away);
+                }
+            }
+            lua_pop(L, 2);
+        }
         LeaveCriticalSection(&_cs);
     }
+    return changed;
 }
 
 void module_set_home_team_for_kits(module_t *m, DWORD team_id, bool is_edit_mode)
@@ -5072,6 +5087,14 @@ DWORD decode_team_id(DWORD team_id_encoded)
     return (team_id_encoded >> 0x0e) & 0x1ffff;
 }
 
+DWORD replace_team_id(DWORD team_id_encoded, DWORD new_team_id)
+{
+    const DWORD team_id_mask = 0x1ffff;
+    const DWORD encoded_mask = team_id_mask << 0x0e;
+    return (team_id_encoded & ~encoded_mask)
+        | ((new_team_id & team_id_mask) << 0x0e);
+}
+
 void at_set_team_id(DWORD *dest, TEAM_INFO_STRUCT *team_info, DWORD offset)
 {
     bool is_home = (offset == 0);
@@ -5113,18 +5136,35 @@ void at_set_team_id(DWORD *dest, TEAM_INFO_STRUCT *team_info, DWORD offset)
             set_context_field_int("stadium_choice", mi->stadium_choice);
             set_match_info(mi);
 
-            DWORD home = decode_team_id(*(DWORD*)((BYTE*)dest - 0x690));
+            DWORD *home_team_id_encoded = (DWORD*)((BYTE*)dest - 0x690);
+            DWORD home = decode_team_id(*home_team_id_encoded);
             DWORD away = decode_team_id(*team_id_encoded);
 
-            set_context_field_int("home_team", home);
-            set_context_field_int("away_team", away);
+            DWORD new_home = home;
+            DWORD new_away = away;
 
             // lua call-backs
             vector<module_t*>::iterator i;
             for (i = _modules.begin(); i != _modules.end(); i++) {
                 module_t *m = *i;
-                module_set_teams(m, home, away); //, _home_team_info, _away_team_info);
+                if (module_set_teams(m, home, away, &new_home, &new_away)) {
+                    break;
+                }
             }
+
+            if (new_home != home || new_away != away) {
+                // Home has already been copied into MATCH_INFO_STRUCT. Away is
+                // currently being copied, so update both its source and target.
+                *home_team_id_encoded = replace_team_id(*home_team_id_encoded, new_home);
+                *dest = replace_team_id(*dest, new_away);
+                *team_id_encoded = replace_team_id(*team_id_encoded, new_away);
+
+                logu_("FORCED TEAMS: %d vs %d --> %d vs %d\n",
+                    home, away, new_home, new_away);
+            }
+
+            set_context_field_int("home_team", new_home);
+            set_context_field_int("away_team", new_away);
         }
     }
 }
