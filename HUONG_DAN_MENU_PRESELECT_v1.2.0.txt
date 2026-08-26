@@ -1,0 +1,37 @@
+PES ARENA AT v1.2.0 - MENU PRESELECT
+====================================
+
+MUC TIEU
+- Dat san Home/Away tai Menu chon doi.
+- Nguoi choi chi viec bam xac nhan.
+- Khong ep Team ID vao Game Plan.
+- PES tu nap Kit, cau thu va chien thuat.
+
+CAU HINH: at/set_teams.ini
+enabled = 1
+home = 101
+away = 102
+mode = menu_preselect
+
+AT.INI
+- Khong thay the file at.ini hien tai cua ban.
+- File at.ini cua ban da co san dong:
+  lua.module = "set_teams.at"
+- Vi vay chi can chep cac file trong goi nang cap vao dung vi tri.
+
+SU DUNG
+1. Chay AT.exe, sau do mo PES2021.exe.
+2. Mo man hinh chon doi.
+3. Di chuyen tay cam/phim mot lan de module ap cap doi.
+4. Menu se dat san Home/Away theo file ini.
+5. Nguoi choi bam xac nhan nhu binh thuong.
+
+KIEM TRA LOG
+- Tim: PES Arena Menu Preselect v1.2.0 loaded
+- Tim: MENU PRESELECT v1.2.0 hook=
+- Overlay hien: menu set HOME vs AWAY
+
+LUU Y
+- Tat cac script Cheat Engine ep doi khi test AT.
+- Neu AOB khong khop ban PES, log hien: AOB menu pair not found.
+- enabled=0 de tat tinh nang.

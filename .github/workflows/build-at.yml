@@ -55,13 +55,13 @@ jobs:
       - name: Create Release ZIP
         shell: powershell
         run: |
-          Compress-Archive -Path release\* -DestinationPath PES_Arena_AT_v1.1.0_SetTeams.zip -Force
+          Compress-Archive -Path release\* -DestinationPath PES_Arena_AT_v1.2.0_MenuPreselect.zip -Force
 
       - name: Upload Release ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: PES_Arena_AT_v1.1.0_SetTeams_Release
-          path: PES_Arena_AT_v1.1.0_SetTeams.zip
+          name: PES_Arena_AT_v1.2.0_MenuPreselect_Release
+          path: PES_Arena_AT_v1.2.0_MenuPreselect.zip
           if-no-files-found: error
 
       - name: Install Inno Setup
@@ -77,6 +77,6 @@ jobs:
       - name: Upload Setup EXE
         uses: actions/upload-artifact@v4
         with:
-          name: PES_Arena_AT_v1.1.0_SetTeams_Setup
-          path: installer\output\PES_Arena_AT_v1.1.0_SetTeams_Setup.exe
+          name: PES_Arena_AT_v1.2.0_MenuPreselect_Setup
+          path: installer\output\PES_Arena_AT_v1.2.0_MenuPreselect_Setup.exe
           if-no-files-found: error
