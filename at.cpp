@@ -2447,9 +2447,8 @@ void module_custom_event(module_t *m, custom_event_t *ce, REGISTERS *regs)
     LeaveCriticalSection(&_cs);
 }
 
-DWORD module_set_teams(module_t *m, DWORD home, DWORD away)
+void module_set_teams(module_t *m, DWORD home, DWORD away)
 {
-    DWORD requested_away = away;
     if (m->evt_set_teams != 0) {
         EnterCriticalSection(&_cs);
         lua_pushvalue(m->L, m->evt_set_teams);
@@ -2458,23 +2457,13 @@ DWORD module_set_teams(module_t *m, DWORD home, DWORD away)
         lua_pushvalue(L, 1); // ctx
         lua_pushinteger(L, home);
         lua_pushinteger(L, away);
-        if (lua_pcall(L, 3, 1, 0) != LUA_OK) {
+        if (lua_pcall(L, 3, 0, 0) != LUA_OK) {
             const char *err = luaL_checkstring(L, -1);
             logu_("[%d] lua ERROR from module_set_teams: %s\n", GetCurrentThreadId(), err);
             lua_pop(L, 1);
         }
-        else {
-            if (lua_isnumber(L, -1)) {
-                lua_Integer value = lua_tointeger(L, -1);
-                if (value > 0 && value <= 0x1ffff) {
-                    requested_away = (DWORD)value;
-                }
-            }
-            lua_pop(L, 1);
-        }
         LeaveCriticalSection(&_cs);
     }
-    return requested_away;
 }
 
 void module_set_home_team_for_kits(module_t *m, DWORD team_id, bool is_edit_mode)
@@ -5076,21 +5065,136 @@ void at_lookup_file(LONGLONG p1, LONGLONG p2, char *filename)
     }
 }
 
+// PES Arena Set Team Core v1.5.0
+// Force team ids at the original set_team_id hook, before PES copies TEAM_INFO_STRUCT.
+// This avoids dynamic CE addresses and keeps all non-team-id bits intact.
+struct FORCE_TEAM_CONFIG {
+    bool enabled;
+    DWORD home;
+    DWORD away;
+    wchar_t source[MAX_PATH];
+};
+
+static FORCE_TEAM_CONFIG _force_team_cfg = { false, 0, 0, L"" };
+static ULONGLONG _force_team_cfg_last_read = 0;
+
+static char* trim_ascii(char *s)
+{
+    while (*s == ' ' || *s == '\t' || *s == '\r' || *s == '\n') s++;
+    char *e = s + strlen(s);
+    while (e > s && (e[-1] == ' ' || e[-1] == '\t' || e[-1] == '\r' || e[-1] == '\n')) --e;
+    *e = '\0';
+    return s;
+}
+
+static void load_force_team_config_legacy(const wchar_t *filename, FORCE_TEAM_CONFIG *cfg)
+{
+    FILE *f = _wfopen(filename, L"rt");
+    if (!f) return;
+
+    char line[256];
+    while (fgets(line, sizeof(line), f)) {
+        char *p = trim_ascii(line);
+        if (*p == '\0' || *p == ';' || *p == '#' || *p == '[') continue;
+        char *eq = strchr(p, '=');
+        if (!eq) continue;
+        *eq = '\0';
+        char *key = trim_ascii(p);
+        char *value = trim_ascii(eq + 1);
+        unsigned long v = strtoul(value, NULL, 0);
+
+        if (_stricmp(key, "enabled") == 0) cfg->enabled = (v != 0);
+        else if (_stricmp(key, "home") == 0) cfg->home = (DWORD)v;
+        else if (_stricmp(key, "away") == 0) cfg->away = (DWORD)v;
+    }
+    fclose(f);
+}
+
+static void load_force_team_config()
+{
+    // The hook can fire many times. Re-read at most 4 times/sec so the ini can be
+    // edited while PES is running without doing disk I/O on every hook call.
+    ULONGLONG now = GetTickCount64();
+    if (_force_team_cfg_last_read && now - _force_team_cfg_last_read < 250) return;
+    _force_team_cfg_last_read = now;
+
+    wchar_t module_ini[MAX_PATH];
+    wchar_t root_ini[MAX_PATH];
+    _snwprintf(module_ini, MAX_PATH, L"%smodule\\set_teams.ini", at_dir);
+    _snwprintf(root_ini, MAX_PATH, L"%sset_teams.ini", at_dir);
+    module_ini[MAX_PATH-1] = L'\0';
+    root_ini[MAX_PATH-1] = L'\0';
+
+    const wchar_t *filename = NULL;
+    if (GetFileAttributesW(module_ini) != INVALID_FILE_ATTRIBUTES) filename = module_ini;
+    else if (GetFileAttributesW(root_ini) != INVALID_FILE_ATTRIBUTES) filename = root_ini;
+
+    FORCE_TEAM_CONFIG next = { false, 0, 0, L"" };
+    if (!filename) {
+        _force_team_cfg = next;
+        return;
+    }
+
+    // Preferred v1.5.0 format: [set_teams] section.
+    int section_enabled = GetPrivateProfileIntW(L"set_teams", L"enabled", -1, filename);
+    if (section_enabled >= 0) {
+        next.enabled = (section_enabled != 0);
+        next.home = (DWORD)GetPrivateProfileIntW(L"set_teams", L"home", 0, filename);
+        next.away = (DWORD)GetPrivateProfileIntW(L"set_teams", L"away", 0, filename);
+    }
+    else {
+        // Compatibility with older files that used bare: enabled/home/away.
+        load_force_team_config_legacy(filename, &next);
+    }
+    wcsncpy(next.source, filename, MAX_PATH - 1);
+    next.source[MAX_PATH - 1] = L'\0';
+
+    bool changed =
+        next.enabled != _force_team_cfg.enabled ||
+        next.home != _force_team_cfg.home ||
+        next.away != _force_team_cfg.away ||
+        wcscmp(next.source, _force_team_cfg.source) != 0;
+
+    _force_team_cfg = next;
+    if (changed) {
+        log_(L"SET_TEAM_CORE v1.5.0: enabled=%d home=%d away=%d ini=%s\n",
+            _force_team_cfg.enabled ? 1 : 0, _force_team_cfg.home, _force_team_cfg.away,
+            _force_team_cfg.source);
+    }
+}
+
 DWORD decode_team_id(DWORD team_id_encoded)
 {
     return (team_id_encoded >> 0x0e) & 0x1ffff;
 }
 
-DWORD replace_team_id(DWORD team_id_encoded, DWORD team_id)
+static DWORD replace_team_id_bits(DWORD encoded, DWORD team_id)
 {
-    const DWORD team_id_mask = 0x1ffff << 0x0e;
-    return (team_id_encoded & ~team_id_mask) | ((team_id & 0x1ffff) << 0x0e);
+    const DWORD TEAM_ID_MASK = (0x1ffffu << 0x0e);
+    return (encoded & ~TEAM_ID_MASK) | ((team_id & 0x1ffffu) << 0x0e);
 }
 
 void at_set_team_id(DWORD *dest, TEAM_INFO_STRUCT *team_info, DWORD offset)
 {
     bool is_home = (offset == 0);
+    if (!dest || !team_info) {
+        return;
+    }
+
     DWORD *team_id_encoded = &(team_info->team_id_encoded);
+
+    load_force_team_config();
+    if (_force_team_cfg.enabled) {
+        DWORD requested = is_home ? _force_team_cfg.home : _force_team_cfg.away;
+        if (requested > 0 && requested <= 0x1ffffu) {
+            DWORD before = decode_team_id(*team_id_encoded);
+            if (before != requested) {
+                *team_id_encoded = replace_team_id_bits(*team_id_encoded, requested);
+                logu_("SET_TEAM_CORE v1.5.0: FORCE %s %d -> %d encoded=0x%08x\n",
+                    is_home ? "HOME" : "AWAY", before, requested, *team_id_encoded);
+            }
+        }
+    }
     if (!dest || !team_id_encoded) {
         // safety check
         return;
@@ -5131,22 +5235,11 @@ void at_set_team_id(DWORD *dest, TEAM_INFO_STRUCT *team_info, DWORD offset)
             DWORD home = decode_team_id(*(DWORD*)((BYTE*)dest - 0x690));
             DWORD away = decode_team_id(*team_id_encoded);
 
-            // Lua callbacks may return an Away team id. A nil return keeps
-            // the original Sider/AT notification-only behaviour.
-            DWORD requested_away = away;
+            // lua call-backs
             vector<module_t*>::iterator i;
             for (i = _modules.begin(); i != _modules.end(); i++) {
                 module_t *m = *i;
-                requested_away = module_set_teams(m, home, requested_away);
-            }
-
-            if (requested_away != away) {
-                DWORD original_encoded = *team_id_encoded;
-                *team_id_encoded = replace_team_id(original_encoded, requested_away);
-                away = requested_away;
-                logu_("SET TEAM AWAY override: %d -> %d (encoded: %08x -> %08x)\n",
-                    decode_team_id(original_encoded), requested_away,
-                    original_encoded, *team_id_encoded);
+                module_set_teams(m, home, away);
             }
 
             set_context_field_int("home_team", home);
