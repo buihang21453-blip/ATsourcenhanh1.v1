@@ -14,6 +14,40 @@ bool _inited(false);
 
 int init();
 
+
+// Read window.hidden from at.ini next to AT.exe.
+// 1 = run AT window completely hidden
+// 0 = show normal/minimized window according to start.minimized
+bool window_hidden()
+{
+    wchar_t exePath[MAX_PATH] = {0};
+    wchar_t iniPath[MAX_PATH] = {0};
+
+    if (GetModuleFileName(NULL, exePath, MAX_PATH) == 0) {
+        return false;
+    }
+
+    wcscpy_s(iniPath, exePath);
+    wchar_t* slash = wcsrchr(iniPath, L'\\');
+    if (slash) {
+        *(slash + 1) = L'\0';
+        wcscat_s(iniPath, L"at.ini");
+    }
+    else {
+        wcscpy_s(iniPath, L"at.ini");
+    }
+
+    // Primary section for the rebranded AT build.
+    int hidden = GetPrivateProfileInt(L"at", L"window.hidden", -1, iniPath);
+
+    // Compatibility fallback for older config files that still use [sider].
+    if (hidden == -1) {
+        hidden = GetPrivateProfileInt(L"sider", L"window.hidden", 0, iniPath);
+    }
+
+    return hidden != 0;
+}
+
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     switch(uMsg)
@@ -72,7 +106,7 @@ HWND BuildWindow(int nCmdShow)
 
     retval = CreateWindowEx(xstyle,
         L"SDR7CL64",      // class name
-        L"PES Arena AT", // title for our window (appears in the titlebar)
+        L"PES Arena",    // title for our window (appears in the titlebar)
         style,
         CW_USEDEFAULT,  // initial x coordinate
         CW_USEDEFAULT,  // initial y coordinate
@@ -95,14 +129,20 @@ HWND BuildWindow(int nCmdShow)
     HGDIOBJ hObj = GetStockObject(DEFAULT_GUI_FONT);
     SendMessage(heightLabel, WM_SETFONT, (WPARAM)hObj, true);
 
-    // Show the window
-    if (start_minimized()) {
-        ShowWindow(retval,
-            SW_SHOWMINIMIZED|SW_SHOWMINNOACTIVE);
+    // Show or completely hide the AT window.
+    // at.ini:
+    //   window.hidden = 1  -> no AT window is shown
+    //   window.hidden = 0  -> use start.minimized as before
+    if (window_hidden()) {
+        ShowWindow(retval, SW_HIDE);
+    }
+    else if (start_minimized()) {
+        ShowWindow(retval, SW_SHOWMINIMIZED | SW_SHOWMINNOACTIVE);
     }
     else {
-        ShowWindow(retval,nCmdShow);
+        ShowWindow(retval, nCmdShow);
     }
+
     return retval; // return its handle for future use.
 }
 
