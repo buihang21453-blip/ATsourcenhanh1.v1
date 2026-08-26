@@ -76,7 +76,7 @@ HWND BuildWindow(int nCmdShow)
         style,
         CW_USEDEFAULT,  // initial x coordinate
         CW_USEDEFAULT,  // initial y coordinate
-        230, 70,   // width and height of the window
+        180, 55,   // width and height of the window
         NULL,           // no parent window.
         NULL,           // no menu
         NULL,           // no creator
@@ -88,8 +88,8 @@ HWND BuildWindow(int nCmdShow)
     style = WS_CHILD | WS_VISIBLE;
     HWND heightLabel = CreateWindowEx(
             xstyle, L"Static", 
-            L"PES Arena Auto Tracker", style,
-            20, 10, 210, 50,
+            L"PES Arena", style,
+            15, 5, 150, 25,
             retval, NULL, NULL, NULL);
 
     HGDIOBJ hObj = GetStockObject(DEFAULT_GUI_FONT);

@@ -7931,8 +7931,7 @@ INT APIENTRY DllMain(HMODULE hDLL, DWORD Reason, LPVOID Reserved)
                 setHook1();
 
                 _overlay_on = _config->_overlay_on_from_start;
-                _overlay_header = L"at ";
-                _overlay_header += version;
+                _overlay_header = L"AT";
                 memset(_overlay_text, 0, sizeof(_overlay_text));
                 memset(_current_overlay_text, 0, sizeof(_current_overlay_text));
                 memset(_overlay_utf8_text, 0, sizeof(_overlay_utf8_text));
