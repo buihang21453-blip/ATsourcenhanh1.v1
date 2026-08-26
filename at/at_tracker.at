@@ -1,0 +1,235 @@
+-- PES Arena AT Auto Score - Stage 1
+-- Source of truth: match.stats() (native AT/Sider match memory reader)
+-- Focus: accurate final score first. No realtime web sending yet.
+--
+-- States written to at/auto_score_state.txt:
+--   IDLE
+--   MATCH_ACTIVE
+--   MATCH_END
+--   MATCH_ABORT
+--   TEAM_RESELECT
+--
+-- GAME_EXIT is finalized later by the desktop/native watcher. This module keeps
+-- the latest score persisted so a watcher can use it if PES2021.exe disappears.
+
+local m = {}
+
+local state = "IDLE"
+local home_team, away_team = nil, nil
+local last = nil
+local ever_had_stats = false
+local match_active = false
+local normal_end_candidate = false
+local last_event = "-"
+local goal_events = 0
+local last_write_key = ""
+
+local function now()
+    return os.date("%Y-%m-%d %H:%M:%S")
+end
+
+local function safe_num(v)
+    if v == nil then return 0 end
+    return tonumber(v) or 0
+end
+
+local function snapshot(stats)
+    if not stats then return nil end
+    return {
+        home_score = safe_num(stats.home_score),
+        away_score = safe_num(stats.away_score),
+        pk_home_score = safe_num(stats.pk_home_score),
+        pk_away_score = safe_num(stats.pk_away_score),
+        period = safe_num(stats.period),
+        clock_minutes = safe_num(stats.clock_minutes),
+        clock_seconds = safe_num(stats.clock_seconds),
+        added_minutes = stats.added_minutes,
+    }
+end
+
+local function score_text(s)
+    if not s then return "-" end
+    if s.period == 5 or s.pk_home_score > 0 or s.pk_away_score > 0 then
+        return string.format("%d-%d | PK %d-%d", s.home_score, s.away_score, s.pk_home_score, s.pk_away_score)
+    end
+    return string.format("%d-%d", s.home_score, s.away_score)
+end
+
+local function write_state(force)
+    local s = last
+    local key = table.concat({
+        state,
+        tostring(home_team or ""), tostring(away_team or ""),
+        s and s.home_score or -1, s and s.away_score or -1,
+        s and s.pk_home_score or -1, s and s.pk_away_score or -1,
+        s and s.period or -1, s and s.clock_minutes or -1,
+        goal_events,
+        last_event,
+    }, "|")
+    if not force and key == last_write_key then return end
+    last_write_key = key
+
+    local f = io.open(".\\at\\auto_score_state.txt", "w")
+    if not f then
+        log("AT_AUTO_SCORE: cannot write at/auto_score_state.txt")
+        return
+    end
+    f:write("AT_AUTO_SCORE_V1\n")
+    f:write("updated_at=" .. now() .. "\n")
+    f:write("state=" .. state .. "\n")
+    f:write("home_team=" .. tostring(home_team or "") .. "\n")
+    f:write("away_team=" .. tostring(away_team or "") .. "\n")
+    if s then
+        f:write("home_score=" .. s.home_score .. "\n")
+        f:write("away_score=" .. s.away_score .. "\n")
+        f:write("pk_home_score=" .. s.pk_home_score .. "\n")
+        f:write("pk_away_score=" .. s.pk_away_score .. "\n")
+        f:write("period=" .. s.period .. "\n")
+        f:write("clock_minutes=" .. s.clock_minutes .. "\n")
+        f:write("clock_seconds=" .. s.clock_seconds .. "\n")
+        f:write("added_minutes=" .. tostring(s.added_minutes or "") .. "\n")
+    else
+        f:write("home_score=\naway_score=\npk_home_score=\npk_away_score=\n")
+        f:write("period=\nclock_minutes=\nclock_seconds=\nadded_minutes=\n")
+    end
+    f:write("goal_events=" .. goal_events .. "\n")
+    f:write("last_event=" .. last_event .. "\n")
+    f:close()
+end
+
+local function mark(new_state, detail)
+    state = new_state
+    last_event = detail and (new_state .. ": " .. detail) or new_state
+    log(string.format("AT_AUTO_SCORE state=%s score=%s period=%s clock=%s:%s",
+        state,
+        score_text(last),
+        last and tostring(last.period) or "-",
+        last and tostring(last.clock_minutes) or "-",
+        last and string.format("%02d", last.clock_seconds) or "-"))
+    write_state(true)
+end
+
+-- Conservative candidate: we only declare MATCH_END on a subsequent exit/reset.
+-- This avoids treating 90:00 as final while injury time is still being played.
+local function update_end_candidate(s)
+    if not s then return end
+    if s.period == 5 then
+        -- Penalty shootout is definitely a terminal phase. When stats disappear
+        -- or context resets after this, treat that as normal MATCH_END.
+        normal_end_candidate = true
+        return
+    end
+    if s.period == 4 and s.clock_minutes >= 120 then
+        normal_end_candidate = true
+        return
+    end
+    if s.period == 2 and s.clock_minutes >= 90 then
+        normal_end_candidate = true
+        return
+    end
+end
+
+local function poll_stats()
+    local stats = match.stats()
+    if stats then
+        local s = snapshot(stats)
+        local changed = (not last)
+            or s.home_score ~= last.home_score
+            or s.away_score ~= last.away_score
+            or s.pk_home_score ~= last.pk_home_score
+            or s.pk_away_score ~= last.pk_away_score
+            or s.period ~= last.period
+            or s.clock_minutes ~= last.clock_minutes
+            or s.added_minutes ~= last.added_minutes
+
+        last = s
+        ever_had_stats = true
+        update_end_candidate(s)
+
+        if not match_active then
+            match_active = true
+            normal_end_candidate = false
+            update_end_candidate(s)
+            mark("MATCH_ACTIVE", "match.stats available")
+        elseif changed then
+            write_state(false)
+        end
+        return true
+    end
+    return false
+end
+
+function m.display_frame(ctx)
+    -- Called every frame, so keep the work tiny. write_state only writes when
+    -- meaningful values change (score/period/minute), not every frame.
+    poll_stats()
+end
+
+function m.set_teams(ctx, home, away)
+    if match_active and home_team and away_team and (home_team ~= home or away_team ~= away) then
+        -- New team selection while a previous match is still considered active.
+        -- Save the last memory score before resetting the new match context.
+        mark("TEAM_RESELECT", string.format("%s vs %s -> %s vs %s",
+            tostring(home_team), tostring(away_team), tostring(home), tostring(away)))
+        match_active = false
+        ever_had_stats = false
+        normal_end_candidate = false
+        last = nil
+        goal_events = 0
+    end
+    home_team, away_team = home, away
+    write_state(true)
+end
+
+function m.goal_scored(ctx, gi)
+    -- Diagnostic cross-check only. Final score always comes from match.stats().
+    goal_events = goal_events + 1
+    poll_stats()
+    last_event = "GOAL_EVENT"
+    write_state(true)
+end
+
+function m.context_reset(ctx)
+    -- Official AT event: game returned to main menu.
+    -- If memory says we reached a terminal phase/time, classify normal end.
+    -- Otherwise it is an early departure from the match.
+    poll_stats()
+    if match_active or ever_had_stats then
+        if normal_end_candidate then
+            mark("MATCH_END", "context_reset after terminal match phase")
+        else
+            mark("MATCH_ABORT", "context_reset before terminal match phase")
+        end
+    else
+        mark("IDLE", "MAIN_MENU")
+    end
+    match_active = false
+    ever_had_stats = false
+    normal_end_candidate = false
+end
+
+function m.overlay_on(ctx)
+    poll_stats()
+    local s = last
+    return string.format(
+        "PES ARENA AUTO SCORE\nStatus: %s\nTeams: %s vs %s\nScore: %s\nPeriod: %s  Clock: %s\nGoal events(check): %d\nLast: %s",
+        state,
+        tostring(home_team or "-"), tostring(away_team or "-"),
+        score_text(s),
+        s and tostring(s.period) or "-",
+        s and string.format("%02d:%02d%s", s.clock_minutes, s.clock_seconds,
+            s.added_minutes and string.format(" (+%d)", s.added_minutes) or "") or "-",
+        goal_events,
+        last_event)
+end
+
+function m.init(ctx)
+    ctx.register("display_frame", m.display_frame)
+    ctx.register("set_teams", m.set_teams)
+    ctx.register("goal_scored", m.goal_scored)
+    ctx.register("context_reset", m.context_reset)
+    ctx.register("overlay_on", m.overlay_on)
+    mark("IDLE", "tracker initialized")
+end
+
+return m

@@ -1,0 +1,20 @@
+PES ARENA AT - GITHUB ACTIONS
+
+1. Giai nen AT_v1.0.0_AutoScore_Source.zip.
+2. Giai nen goi Addon nay VAO CHINH THU MUC SOURCE.
+   Sau khi giai nen phai co:
+      .github\workflows\build-at.yml
+      installer\AT_Setup.iss
+      Makefile
+      at.ini
+      at\
+3. Tao repository moi tren GitHub.
+4. Upload TOAN BO NOI DUNG trong thu muc source len root repository.
+   KHONG boc them mot thu muc ngoai.
+5. Mo repository -> Actions -> Build PES Arena AT -> Run workflow.
+6. Cho build xong, mo run do -> Artifacts.
+7. Tai:
+      PES_Arena_AT_v1.0.0_Release
+      PES_Arena_AT_v1.0.0_Setup
+
+Neu build do, mo job Build AT.exe and at.dll va gui log loi cho ChatGPT.

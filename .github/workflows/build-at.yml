@@ -1,0 +1,82 @@
+name: Build PES Arena AT
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup MSVC x64
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Verify build tools
+        shell: cmd
+        run: |
+          where cl
+          where link
+          where nmake
+          where rc
+          where ml64
+          where fxc
+
+      - name: Build AT.exe and at.dll
+        shell: cmd
+        run: |
+          nmake clean
+          nmake all
+
+      - name: Create release folder
+        shell: cmd
+        run: |
+          if exist MAKE_RELEASE.cmd (
+            call MAKE_RELEASE.cmd
+          ) else (
+            mkdir release
+            mkdir release\at
+            copy /y AT.exe release\AT.exe
+            copy /y at.dll release\at.dll
+            copy /y at.ini release\at.ini
+            if exist toggle.wav copy /y toggle.wav release\toggle.wav
+            if exist at\at_tracker.at copy /y at\at_tracker.at release\at\at_tracker.at
+          )
+
+      - name: Create Release ZIP
+        shell: powershell
+        run: |
+          Compress-Archive -Path release\* -DestinationPath PES_Arena_AT_v1.0.0.zip -Force
+
+      - name: Upload Release ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: PES_Arena_AT_v1.0.0_Release
+          path: PES_Arena_AT_v1.0.0.zip
+          if-no-files-found: error
+
+      - name: Install Inno Setup
+        shell: powershell
+        run: choco install innosetup -y --no-progress
+
+      - name: Build Setup EXE
+        shell: cmd
+        run: |
+          if not exist "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" exit /b 1
+          "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\AT_Setup.iss
+
+      - name: Upload Setup EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: PES_Arena_AT_v1.0.0_Setup
+          path: installer\output\PES_Arena_AT_v1.0.0_Setup.exe
+          if-no-files-found: error

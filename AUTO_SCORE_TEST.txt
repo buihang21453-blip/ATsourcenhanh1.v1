@@ -1,0 +1,27 @@
+PES ARENA AT - AUTO SCORE V1 TEST
+=================================
+
+MUC TIEU BAN NAY
+- Ty so chinh doc tu match.stats() (Memory API cua AT 7.4.1)
+- penalty doc rieng: pk_home_score / pk_away_score
+- goal_scored chi de doi chieu, KHONG dung de cong ty so chinh
+- luu trang thai moi nhat vao: at\auto_score_state.txt
+
+TRANG THAI
+- MATCH_ACTIVE: dang co match.stats
+- MATCH_END: quay ve Main Menu sau giai doan ket thuc (>=90 phut, >=120 phut, hoac penalty)
+- MATCH_ABORT: roi ve Main Menu truoc giai doan ket thuc
+- TEAM_RESELECT: doi lai cap doi khi tran truoc van dang active
+- GAME_EXIT: chua the ket luan tu Lua vi PES process bien mat cung lam module dung.
+  Ban nay da luu last score lien tuc de native/desktop watcher xu ly GAME_EXIT o buoc tiep theo.
+
+TEST TOI THIEU
+1. Da 1 tran 90 phut binh thuong, quay ve menu.
+2. Da tran co hiep phu.
+3. Da tran penalty.
+4. Dang da roi thoat ve menu som.
+5. Dang da roi chon lai doi.
+6. Alt+F4/crash: kiem tra at\auto_score_state.txt con ty so gan nhat.
+
+SAU MOI TEST
+Mo at\auto_score_state.txt va gui file nay + at.log cho toi neu co truong hop nhan sai.
